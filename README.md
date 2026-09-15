@@ -1,36 +1,49 @@
 # ResearchManager
 
-一套面向科研与工程实验的轻量多 Agent 协作规范。它解决的不是“让更多 Agent 同时工作”，而是让需求、数据、实现和实验之间有清晰边界，结果能够复现和追溯。
+一套面向科研与工程实验的轻量多 Agent 协作规范。它解决的不是“让更多 Agent 同时工作”，而是让研究规划、数据、实现和正式实验之间有清晰边界，同时利用 Skill 的按需加载减少长期上下文负担。
 
-## 组织架构
+## 架构
 
 ```mermaid
 flowchart TB
-    U[用户] --> P[主 Agent<br/>需求沟通 · 架构决策 · Draft Plan]
-    P --> D[data_manager<br/>数据 · 标注 · 数据验证]
-    P --> I[implementation_manager<br/>代码 · 配置 · Pipeline · 测试]
-    P --> E[experiment_manager<br/>训练 · 监控 · 实验归档]
-    D --> I
-    I --> E
-    E --> P
+    U[用户] --> P[主 Agent<br/>理解目标 · 整合证据 · 最终汇报]
+    P --> S{按需 Skill 路由}
+    S --> SP[research-planning]
+    S --> SD[research-data]
+    S --> SI[research-implementation]
+    S --> SE[research-experiment]
+    SP -.需要时读取.-> R[agents/ 角色参考]
+    SD -.需要时读取.-> R
+    SI -.需要时读取.-> R
+    SE -.需要时读取.-> R
 ```
 
-主 Agent 就是架构负责人，不再额外设置 `architecture_manager`。Pipeline 属于实现工作，因此由 `implementation_manager` 负责。只有出现真实的多机、多 GPU 调度冲突时，才考虑增加资源管理角色。
+`AGENTS.md` 只保留长期成立的全局合同；`.agents/skills/` 负责可识别用户目标的具体 workflow；`agents/` 保存稳定角色的详细职责并在 skill 触发后按需读取。这样主 Agent 不需要在每次请求中预加载完整科研 SOP。
 
 ## 核心原则
 
-- 先自然讨论需求，每轮只解决少量关键问题。
-- 信息足够后由主 Agent 给出 Draft Plan。
-- 用户确认计划前，不安排完整实现或正式实验。
-- 使用少量、稳定、可复用的角色，避免按一次性任务反复创建 Agent。
-- 数据、实现、实验必须逐级交接，主 Agent 是唯一对用户汇报的协调者。
-- 早期数据、配置和实验结果保留，使用新版本路径，不覆盖历史证据。
-- 项目记录描述研究问题、决策与结果，不记录无关的 Agent 对话。
+- **薄全局合同**：只把指令优先级、授权边界、证据要求和完成定义放进 `AGENTS.md`。
+- **窄 Skill 触发**：每个 skill 对应一个清晰任务类型，并在 `description` 中同时写明适用与不适用场景。
+- **渐进加载**：先依赖 skill 的 `name + description` 做路由，触发后才读取完整 `SKILL.md` 和必要参考文档。
+- **偏向完成**：目标明确、可逆、低风险的工作直接推进到完成，不为每一步机械请求确认。
+- **重大边界才规划**：只有研究问题、数据语义、核心接口、评价标准、物理边界等发生实质变化时才要求 Draft Plan。
+- **稳定角色**：继续复用 `data_manager`、`implementation_manager`、`experiment_manager`，但不把角色文档作为常驻上下文。
+- **可复现证据**：数据、配置、正式实验保留版本、命令、路径和验证结果，失败也作为证据记录。
 
 ## 文件结构
 
 ```text
 AGENTS.md
+.agents/
+  skills/
+    research-planning/
+      SKILL.md
+    research-data/
+      SKILL.md
+    research-implementation/
+      SKILL.md
+    research-experiment/
+      SKILL.md
 agents/
   README.md
   data_manager.md
@@ -38,6 +51,7 @@ agents/
   experiment_manager.md
 docs/
   WORKFLOW.md
+  SKILL_EVALS.md
 templates/
   DECISIONS.md
   EXPERIMENT_LOG.md
@@ -46,9 +60,11 @@ templates/
 
 ## 使用方式
 
-1. 将 `AGENTS.md`、`agents/` 和需要的 `templates/` 复制到研究项目根目录。
-2. 在项目的 `AGENTS.md` 中补充领域约束、数据合同和安全边界。
-3. 主 Agent 根据 `agents/README.md` 路由任务。
-4. 将模板复制到项目的 `docs/`，持续记录决策、实验和实现历史。
+1. 将 `AGENTS.md`、`.agents/skills/`、`agents/` 和需要的 `templates/` 放到研究项目根目录。
+2. 在项目级 `AGENTS.md` 中只补充真正长期成立的领域、硬件、安全和不可逆操作约束；不要把临时项目流程继续堆进去。
+3. Codex 从 repo 的 `.agents/skills/` 发现工作流；主 Agent根据 skill description 选择最窄的匹配项。
+4. skill 触发后，再按其中的说明读取 `agents/`、`docs/WORKFLOW.md` 或项目代码/数据。
+5. 用 `docs/SKILL_EVALS.md` 的正例、反例和边界请求定期检查 skill 路由是否退化。
+6. 将模板复制到项目的 `docs/`，持续记录决策、实验和实现历史。
 
 详细生命周期见 [docs/WORKFLOW.md](docs/WORKFLOW.md)。
